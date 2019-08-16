@@ -73,7 +73,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         // need to bind at instantiation so that service loads (to test more)
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24")); // AltBeacon
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")); // IBeacon
-//        mBeaconManager.setDebug(false);
+        // mBeaconManager.setDebug(false);
 
         // Fix: may not be called after consumers are already bound beacon
         if (!mBeaconManager.isAnyConsumerBound()) {
@@ -86,9 +86,9 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
             builder.setContentIntent(pendingIntent);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationChannel channel = new NotificationChannel("My Notification Channel ID",
-                        "My Notification Name", NotificationManager.IMPORTANCE_DEFAULT);
-                channel.setDescription("My Notification Channel Description");
+                NotificationChannel channel = new NotificationChannel("beacons",
+                        "Beacons", NotificationManager.IMPORTANCE_DEFAULT);
+                channel.setDescription("Beacons ON notification");
                 NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
                 notificationManager.createNotificationChannel(channel);
                 builder.setChannelId(channel.getId());
@@ -409,6 +409,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
     @ReactMethod
     public void stopMonitoring(String regionId, String beaconUuid, int minor, int major, Callback resolve, Callback reject) {
+
         Region region = createRegion(
                 regionId,
                 beaconUuid,
@@ -419,8 +420,17 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         );
 
         try {
+          if (Build.VERSION.SDK_INT > 26) {
+                NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+                notificationManager.deleteNotificationChannel("beacons");
+                Log.e(LOG_TAG, "Delete notif channel");
+              }
             mBeaconManager.stopMonitoringBeaconsInRegion(region);
+            mBeaconManager.removeAllMonitorNotifiers();
             this.MyRegion = null;
+            mBeaconManager.setAndroidLScanningDisabled(true);
+            unbindManager();
+            mBeaconManager.disableForegroundServiceScanning();
             resolve.invoke();
         } catch (Exception e) {
             Log.e(LOG_TAG, "stopMonitoring, error: ", e);
