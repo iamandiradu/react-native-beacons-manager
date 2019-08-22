@@ -425,11 +425,12 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
                 notificationManager.deleteNotificationChannel("beacons");
                 Log.e(LOG_TAG, "Delete notif channel");
               }
+            unbindManager();
             mBeaconManager.stopMonitoringBeaconsInRegion(region);
             mBeaconManager.removeAllMonitorNotifiers();
             this.MyRegion = null;
             mBeaconManager.setAndroidLScanningDisabled(true);
-            unbindManager();
+
             mBeaconManager.disableForegroundServiceScanning();
             resolve.invoke();
         } catch (Exception e) {
