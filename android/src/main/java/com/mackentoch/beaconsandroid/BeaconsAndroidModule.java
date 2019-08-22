@@ -73,7 +73,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         // need to bind at instantiation so that service loads (to test more)
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24")); // AltBeacon
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")); // IBeacon
-        // mBeaconManager.setDebug(false);
+        mBeaconManager.setDebug(true);
 
         // Fix: may not be called after consumers are already bound beacon
         if (!mBeaconManager.isAnyConsumerBound()) {
@@ -93,7 +93,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
                 notificationManager.createNotificationChannel(channel);
                 builder.setChannelId(channel.getId());
             }
-
             mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
             // For the above foreground scanning service to be useful, you need to disable
             // JobScheduler-based scans (used on Android 8+) and set a fast background scan
@@ -409,7 +408,9 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
     @ReactMethod
     public void stopMonitoring(String regionId, String beaconUuid, int minor, int major, Callback resolve, Callback reject) {
-
+      if (!mBeaconManager.isBound(this)) {
+          return;
+      }
         Region region = createRegion(
                 regionId,
                 beaconUuid,
@@ -430,11 +431,13 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
             this.MyRegion = null;
 
             mBeaconManager.setAndroidLScanningDisabled(true);
-            unbindManager();
             mBeaconManager.stopMonitoringBeaconsInRegion(region);
             mBeaconManager.removeAllMonitorNotifiers();
+            if (mBeaconManager.isAnyConsumerBound()) {
+              unbindManager();
+            }
             mBeaconManager.disableForegroundServiceScanning();
-            bindManager();
+            // bindManager();
             resolve.invoke();
         } catch (Exception e) {
             Log.e(LOG_TAG, "stopMonitoring, error: ", e);
