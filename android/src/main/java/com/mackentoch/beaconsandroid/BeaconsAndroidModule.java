@@ -411,7 +411,8 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 				}
 
 				mBeaconManager.setAndroidLScanningDisabled(true);
-				mBeaconManager.removeAllMonitorNotifiers();
+        mBeaconManager.removeAllMonitorNotifiers();
+        mBeaconManager.removeAllRangeNotifiers();
         unbindManager();
         if (!mBeaconManager.isAnyConsumerBound()) {
           mBeaconManager.disableForegroundServiceScanning();
@@ -434,9 +435,8 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 		try {
       // failsafe
       // if (mBeaconManager.isAnyConsumerBound()) {
-        Log.e(LOG_TAG, "Failsafe engaged, unbinding before starting service");
-        // mBeaconManager.removeAllMonitorNotifiers();
-        unbindManager();
+        // unbindManager();
+
       // }
 			if (!mBeaconManager.isAnyConsumerBound()) {
         // need to bind at instantiation so that service loads (to test more)
