@@ -125,9 +125,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	public void addParser(String parser, Callback resolve, Callback reject) {
 		try {
 			Log.d(LOG_TAG, "addParser: " + parser);
-			unbindManager();
 			mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout(parser));
-			bindManager();
 			resolve.invoke();
 		} catch(Exception e) {
 			reject.invoke(e.getMessage());
@@ -259,9 +257,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	public void onBeaconServiceConnect() {
 		Log.v(LOG_TAG, "onBeaconServiceConnect");
 
-		// deprecated since v2.9 (see github: https://github.com/AltBeacon/android-beacon-library/releases/tag/2.9)
-		// mBeaconManager.setMonitorNotifier(mMonitorNotifier);
-		// mBeaconManager.setRangeNotifier(mRangeNotifier);
 		mBeaconManager.addMonitorNotifier(mMonitorNotifier);
 		// mBeaconManager.addRangeNotifier(mRangeNotifier);
 		sendEvent(mReactContext, "beaconServiceConnected", null);
@@ -356,7 +351,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
 		@Override
 		public void didDetermineStateForRegion(int i, Region region) {
-			// Log.i(LOG_TAG, "didDetermineStateForRegion");
 			sendDebug(new JSONObject() {
 				{
 					try {
@@ -399,27 +393,21 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	}
 
 	@ReactMethod
-	public void stopBeaconService(Callback resolve, Callback reject) {
+	public void stopBeaconService(Boolean toggled, Callback resolve, Callback reject) {
 		Log.e(LOG_TAG, "Stopping Beacon Service");
 		try {
-			if (mBeaconManager.isAnyConsumerBound()) {
-
-				if (Build.VERSION.SDK_INT > 26) {
+      if (toggled.booleanValue()) {
+        if (Build.VERSION.SDK_INT > 26) {
 					NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
 					notificationManager.deleteNotificationChannel("beacons");
-					Log.e(LOG_TAG, "Delete notif channel");
+          Log.e(LOG_TAG, "Delete notif channel");
+          unbindManager();
 				}
-
-				mBeaconManager.setAndroidLScanningDisabled(true);
-        mBeaconManager.removeAllMonitorNotifiers();
-        mBeaconManager.removeAllRangeNotifiers();
+      } else {
         unbindManager();
-        if (!mBeaconManager.isAnyConsumerBound()) {
-          mBeaconManager.disableForegroundServiceScanning();
-        }
-			}
+        mBeaconManager.disableForegroundServiceScanning();
+      }
 
-			// bindManager();
 			resolve.invoke();
 		} catch(Exception e) {
 			Log.e(LOG_TAG, "stopBeaconService, error: ", e);
@@ -428,19 +416,16 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	}
 
 	@ReactMethod
-	public void startBeaconService(Callback resolve, Callback reject) {
+	public void startBeaconService(Boolean toggled, Callback resolve, Callback reject) {
 		Log.e(LOG_TAG, "Starting Beacon Service");
 		this.mApplicationContext = mReactContext.getApplicationContext();
-		this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
-		try {
-      // failsafe
-      // if (mBeaconManager.isAnyConsumerBound()) {
-        // unbindManager();
+    this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
 
-      // }
-			if (!mBeaconManager.isAnyConsumerBound()) {
-        // need to bind at instantiation so that service loads (to test more)
-        // mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24")); // AltBeacon
+    try {
+      if (toggled.booleanValue()) {
+        unbindManager();
+      }
+      if (!mBeaconManager.isAnyConsumerBound()) {
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")); // IBeacon
 
 				Notification.Builder builder = new Notification.Builder(mApplicationContext);
@@ -460,22 +445,19 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         }
         Log.e(LOG_TAG, "Notification Channel started");
 
-				mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
-				// For the above foreground scanning service to be useful, you need to disable
-				// JobScheduler-based scans (used on Android 8+) and set a fast background scan
-				// cycle that would otherwise be disallowed by the operating system.
-				//
-				mBeaconManager.setEnableScheduledScanJobs(false);
-				mBeaconManager.setBackgroundBetweenScanPeriod(0);
-				mBeaconManager.setBackgroundScanPeriod(1100);
+        mBeaconManager.enableForegroundServiceScanning(builder.build(), 12345);
+        mBeaconManager.setEnableScheduledScanJobs(false);
+        mBeaconManager.setBackgroundBetweenScanPeriod(0);
+        mBeaconManager.setBackgroundScanPeriod(1100);
 
+        Log.e(LOG_TAG, "Foreground Service started");
 				bindManager();
-			}
+      }
 			resolve.invoke();
 		} catch(Exception e) {
 			Log.e(LOG_TAG, "startBeaconService, error: ", e);
 			reject.invoke(e.getMessage());
-		}
+    }
 	}
 
 	/***********************************************************************************************
