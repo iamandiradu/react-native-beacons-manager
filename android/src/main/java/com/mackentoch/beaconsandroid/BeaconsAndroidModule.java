@@ -51,723 +51,749 @@ import java.util.List;
 import java.util.Map;
 
 public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements BeaconConsumer {
-    private static final String LOG_TAG = "BeaconsAndroidModule";
-    private static final String NOTIFICATION_CHANNEL_ID = "BeaconsAndroidModule";
-    private static final int RUNNING_AVG_RSSI_FILTER = 0;
-    private static final int ARMA_RSSI_FILTER = 1;
-    private BeaconManager mBeaconManager;
-    private Context mApplicationContext;
-    private ReactApplicationContext mReactContext;
-    private static boolean channelCreated = false;
-    private String debugApi = null;
-    private String requestToken = null;
-    private String beaconRequestApi = null;
-    private Region MyRegion = null;
+	private static final String LOG_TAG = "BeaconsAndroidModule";
+	private static final String NOTIFICATION_CHANNEL_ID = "BeaconsAndroidModule";
+	private static final int RUNNING_AVG_RSSI_FILTER = 0;
+	private static final int ARMA_RSSI_FILTER = 1;
+	private BeaconManager mBeaconManager;
+	private Context mApplicationContext;
+	private ReactApplicationContext mReactContext;
+	private static boolean channelCreated = false;
+	private String debugApi = null;
+	private String requestToken = null;
+	private String beaconRequestApi = null;
+	private Region MyRegion = null;
 
-    public BeaconsAndroidModule(ReactApplicationContext reactContext) {
-        super(reactContext);
-        Log.d(LOG_TAG, "BeaconsAndroidModule - started");
-        this.mReactContext = reactContext;
-        this.mApplicationContext = reactContext.getApplicationContext();
-        this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
-        // need to bind at instantiation so that service loads (to test more)
-        mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24")); // AltBeacon
-        mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")); // IBeacon
-        mBeaconManager.setDebug(true);
+	public BeaconsAndroidModule(ReactApplicationContext reactContext) {
+		super(reactContext);
+		Log.d(LOG_TAG, "BeaconsAndroidModule - started");
+		this.mReactContext = reactContext;
+		this.mApplicationContext = reactContext.getApplicationContext();
+		this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
 
-        // Fix: may not be called after consumers are already bound beacon
-        if (!mBeaconManager.isAnyConsumerBound()) {
-            Notification.Builder builder = new Notification.Builder(mApplicationContext);
-            builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_notification", "mipmap", mApplicationContext.getPackageName()));
-            builder.setContentTitle("Scanning for Beacons");
-            Class intentClass = getMainActivityClass();
-            Intent intent = new Intent(mApplicationContext, intentClass);
-            PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            builder.setContentIntent(pendingIntent);
+		mBeaconManager.setDebug(false);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationChannel channel = new NotificationChannel("beacons",
-                        "Beacons", NotificationManager.IMPORTANCE_DEFAULT);
-                channel.setDescription("Beacons ON notification");
-                NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-                notificationManager.createNotificationChannel(channel);
-                builder.setChannelId(channel.getId());
-            }
-            mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
-            // For the above foreground scanning service to be useful, you need to disable
-            // JobScheduler-based scans (used on Android 8+) and set a fast background scan
-            // cycle that would otherwise be disallowed by the operating system.
-            //
-            mBeaconManager.setEnableScheduledScanJobs(false);
-            mBeaconManager.setBackgroundBetweenScanPeriod(0);
-            mBeaconManager.setBackgroundScanPeriod(1100);
+		// Fix beacon empty when screen off
+		ScanFilter.Builder builder = null;
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			builder = new ScanFilter.Builder();
+			builder.setManufacturerData(0x004c, new byte[] {});
+			ScanFilter filter = builder.build();
+		}
+	}
 
-            bindManager();
-        }
+	@Override
+	public String getName() {
+		return LOG_TAG;
+	}
 
-        // Fix beacon empty when screen off
-        ScanFilter.Builder builder = null;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            builder = new ScanFilter.Builder();
-            builder.setManufacturerData(0x004c, new byte[]{});
-            ScanFilter filter = builder.build();
-        }
-    }
+	@Override
+	public Map < String,
+	Object > getConstants() {
+		final Map < String,
+		Object > constants = new HashMap < >();
+		constants.put("SUPPORTED", BeaconTransmitter.SUPPORTED);
+		constants.put("NOT_SUPPORTED_MIN_SDK", BeaconTransmitter.NOT_SUPPORTED_MIN_SDK);
+		constants.put("NOT_SUPPORTED_BLE", BeaconTransmitter.NOT_SUPPORTED_BLE);
+		constants.put("NOT_SUPPORTED_CANNOT_GET_ADVERTISER_MULTIPLE_ADVERTISEMENTS", BeaconTransmitter.NOT_SUPPORTED_CANNOT_GET_ADVERTISER_MULTIPLE_ADVERTISEMENTS);
+		constants.put("NOT_SUPPORTED_CANNOT_GET_ADVERTISER", BeaconTransmitter.NOT_SUPPORTED_CANNOT_GET_ADVERTISER);
+		constants.put("RUNNING_AVG_RSSI_FILTER", RUNNING_AVG_RSSI_FILTER);
+		constants.put("ARMA_RSSI_FILTER", ARMA_RSSI_FILTER);
+		return constants;
+	}
 
-    @Override
-    public String getName() {
-        return LOG_TAG;
-    }
+	@ReactMethod
+	public void setHardwareEqualityEnforced(Boolean e) {
+		Beacon.setHardwareEqualityEnforced(e.booleanValue());
+	}
 
-    @Override
-    public Map<String, Object> getConstants() {
-        final Map<String, Object> constants = new HashMap<>();
-        constants.put("SUPPORTED", BeaconTransmitter.SUPPORTED);
-        constants.put("NOT_SUPPORTED_MIN_SDK", BeaconTransmitter.NOT_SUPPORTED_MIN_SDK);
-        constants.put("NOT_SUPPORTED_BLE", BeaconTransmitter.NOT_SUPPORTED_BLE);
-        constants.put("NOT_SUPPORTED_CANNOT_GET_ADVERTISER_MULTIPLE_ADVERTISEMENTS", BeaconTransmitter.NOT_SUPPORTED_CANNOT_GET_ADVERTISER_MULTIPLE_ADVERTISEMENTS);
-        constants.put("NOT_SUPPORTED_CANNOT_GET_ADVERTISER", BeaconTransmitter.NOT_SUPPORTED_CANNOT_GET_ADVERTISER);
-        constants.put("RUNNING_AVG_RSSI_FILTER", RUNNING_AVG_RSSI_FILTER);
-        constants.put("ARMA_RSSI_FILTER", ARMA_RSSI_FILTER);
-        return constants;
-    }
+	public void bindManager() {
+		if (!mBeaconManager.isBound(this)) {
+			Log.d(LOG_TAG, "bindManager: ");
+			mBeaconManager.bind(this);
+		}
+	}
 
-    @ReactMethod
-    public void setHardwareEqualityEnforced(Boolean e) {
-        Beacon.setHardwareEqualityEnforced(e.booleanValue());
-    }
+	public void unbindManager() {
+		if (mBeaconManager.isBound(this)) {
+			Log.d(LOG_TAG, "unbindManager: ");
+			mBeaconManager.unbind(this);
+		}
+	}
 
-    public void bindManager() {
-        if (!mBeaconManager.isBound(this)) {
-            Log.d(LOG_TAG, "BeaconsAndroidModule - bindManager: ");
-            mBeaconManager.bind(this);
-        }
-    }
+	@ReactMethod
+	public void addParser(String parser, Callback resolve, Callback reject) {
+		try {
+			Log.d(LOG_TAG, "addParser: " + parser);
+			unbindManager();
+			mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout(parser));
+			bindManager();
+			resolve.invoke();
+		} catch(Exception e) {
+			reject.invoke(e.getMessage());
+		}
+	}
 
-    public void unbindManager() {
-        if (mBeaconManager.isBound(this)) {
-            Log.d(LOG_TAG, "BeaconsAndroidModule - unbindManager: ");
-            mBeaconManager.unbind(this);
-        }
-    }
+	@ReactMethod
+	public void removeParser(String parser, Callback resolve, Callback reject) {
+		try {
+			Log.d(LOG_TAG, "removeParser: " + parser);
+			unbindManager();
+			mBeaconManager.getBeaconParsers().remove(new BeaconParser().setBeaconLayout(parser));
+			bindManager();
+			resolve.invoke();
+		} catch(Exception e) {
+			reject.invoke(e.getMessage());
+		}
+	}
 
-    @ReactMethod
-    public void addParser(String parser, Callback resolve, Callback reject) {
-        try {
-            Log.d(LOG_TAG, "BeaconsAndroidModule - addParser: " + parser);
-            unbindManager();
-            mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout(parser));
-            bindManager();
-            resolve.invoke();
-        } catch (Exception e) {
-            reject.invoke(e.getMessage());
-        }
-    }
+	@ReactMethod
+	public void addParsersListToDetection(ReadableArray parsers, Callback resolve, Callback reject) {
+		try {
+			unbindManager();
+			for (int i = 0; i < parsers.size(); i++) {
+				String parser = parsers.getString(i);
+				Log.d(LOG_TAG, "addParsersListToDetection - add parser: " + parser);
+				mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout(parser));
+			}
+			bindManager();
+			resolve.invoke(parsers);
+		} catch(Exception e) {
+			reject.invoke(e.getMessage());
+		}
+	}
 
-    @ReactMethod
-    public void removeParser(String parser, Callback resolve, Callback reject) {
-        try {
-            Log.d(LOG_TAG, "BeaconsAndroidModule - removeParser: " + parser);
-            unbindManager();
-            mBeaconManager.getBeaconParsers().remove(new BeaconParser().setBeaconLayout(parser));
-            bindManager();
-            resolve.invoke();
-        } catch (Exception e) {
-            reject.invoke(e.getMessage());
-        }
-    }
+	@ReactMethod
+	public void removeParsersListToDetection(ReadableArray parsers, Callback resolve, Callback reject) {
+		try {
+			unbindManager();
+			for (int i = 0; i < parsers.size(); i++) {
+				String parser = parsers.getString(i);
+				Log.d(LOG_TAG, "removeParsersListToDetection - remove parser: " + parser);
+				mBeaconManager.getBeaconParsers().remove(new BeaconParser().setBeaconLayout(parser));
+			}
+			bindManager();
+			resolve.invoke(parsers);
+		} catch(Exception e) {
+			reject.invoke(e.getMessage());
+		}
+	}
 
-    @ReactMethod
-    public void addParsersListToDetection(ReadableArray parsers, Callback resolve, Callback reject) {
-        try {
-            unbindManager();
-            for (int i = 0; i < parsers.size(); i++) {
-                String parser = parsers.getString(i);
-                Log.d(LOG_TAG, "addParsersListToDetection - add parser: " + parser);
-                mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout(parser));
-            }
-            bindManager();
-            resolve.invoke(parsers);
-        } catch (Exception e) {
-            reject.invoke(e.getMessage());
-        }
-    }
+	@ReactMethod
+	public void setBackgroundScanPeriod(int period) {
+		mBeaconManager.setBackgroundScanPeriod((long) period);
+	}
 
-    @ReactMethod
-    public void removeParsersListToDetection(ReadableArray parsers, Callback resolve, Callback reject) {
-        try {
-            unbindManager();
-            for (int i = 0; i < parsers.size(); i++) {
-                String parser = parsers.getString(i);
-                Log.d(LOG_TAG, "removeParsersListToDetection - remove parser: " + parser);
-                mBeaconManager.getBeaconParsers().remove(new BeaconParser().setBeaconLayout(parser));
-            }
-            bindManager();
-            resolve.invoke(parsers);
-        } catch (Exception e) {
-            reject.invoke(e.getMessage());
-        }
-    }
+	@ReactMethod
+	public void setBackgroundBetweenScanPeriod(int period) {
+		mBeaconManager.setBackgroundBetweenScanPeriod((long) period);
+	}
 
-    @ReactMethod
-    public void setBackgroundScanPeriod(int period) {
-        mBeaconManager.setBackgroundScanPeriod((long) period);
-    }
+	@ReactMethod
+	public void setForegroundScanPeriod(int period) {
+		mBeaconManager.setForegroundScanPeriod((long) period);
+	}
 
-    @ReactMethod
-    public void setBackgroundBetweenScanPeriod(int period) {
-        mBeaconManager.setBackgroundBetweenScanPeriod((long) period);
-    }
+	@ReactMethod
+	public void setForegroundBetweenScanPeriod(int period) {
+		mBeaconManager.setForegroundBetweenScanPeriod((long) period);
+	}
 
-    @ReactMethod
-    public void setForegroundScanPeriod(int period) {
-        mBeaconManager.setForegroundScanPeriod((long) period);
-    }
+	@ReactMethod
+	public void setRssiFilter(int filterType, double avgModifier) {
+		String logMsg = "Could not set the rssi filter.";
+		if (filterType == RUNNING_AVG_RSSI_FILTER) {
+			logMsg = "Setting filter RUNNING_AVG";
+			BeaconManager.setRssiFilterImplClass(RunningAverageRssiFilter.class);
+			if (avgModifier > 0) {
+				RunningAverageRssiFilter.setSampleExpirationMilliseconds((long) avgModifier);
+				logMsg += " with custom avg modifier";
+			}
+		} else if (filterType == ARMA_RSSI_FILTER) {
+			logMsg = "Setting filter ARMA";
+			BeaconManager.setRssiFilterImplClass(ArmaRssiFilter.class);
+			if (avgModifier > 0) {
+				ArmaRssiFilter.setDEFAULT_ARMA_SPEED(avgModifier);
+				logMsg += " with custom avg modifier";
+			}
+		}
+		Log.d(LOG_TAG, logMsg);
+	}
 
-    @ReactMethod
-    public void setForegroundBetweenScanPeriod(int period) {
-        mBeaconManager.setForegroundBetweenScanPeriod((long) period);
-    }
+	@ReactMethod
+	public void checkTransmissionSupported(Callback callback) {
+		int result = BeaconTransmitter.checkTransmissionSupported(mReactContext);
+		callback.invoke(result);
+	}
 
-    @ReactMethod
-    public void setRssiFilter(int filterType, double avgModifier) {
-        String logMsg = "Could not set the rssi filter.";
-        if (filterType == RUNNING_AVG_RSSI_FILTER) {
-            logMsg = "Setting filter RUNNING_AVG";
-            BeaconManager.setRssiFilterImplClass(RunningAverageRssiFilter.class);
-            if (avgModifier > 0) {
-                RunningAverageRssiFilter.setSampleExpirationMilliseconds((long) avgModifier);
-                logMsg += " with custom avg modifier";
-            }
-        } else if (filterType == ARMA_RSSI_FILTER) {
-            logMsg = "Setting filter ARMA";
-            BeaconManager.setRssiFilterImplClass(ArmaRssiFilter.class);
-            if (avgModifier > 0) {
-                ArmaRssiFilter.setDEFAULT_ARMA_SPEED(avgModifier);
-                logMsg += " with custom avg modifier";
-            }
-        }
-        Log.d(LOG_TAG, logMsg);
-    }
+	@ReactMethod
+	public void getMonitoredRegions(Callback callback) {
+		WritableArray array = new WritableNativeArray();
+		for (Region region: mBeaconManager.getMonitoredRegions()) {
+			WritableMap map = new WritableNativeMap();
+			map.putString("identifier", region.getUniqueId());
+			map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
+			map.putInt("major", region.getId2() != null ? region.getId2().toInt() : 0);
+			map.putInt("minor", region.getId3() != null ? region.getId3().toInt() : 0);
+			array.pushMap(map);
+		}
+		callback.invoke(array);
+	}
 
-    @ReactMethod
-    public void checkTransmissionSupported(Callback callback) {
-        int result = BeaconTransmitter.checkTransmissionSupported(mReactContext);
-        callback.invoke(result);
-    }
+	@ReactMethod
+	public void getRangedRegions(Callback callback) {
+		WritableArray array = new WritableNativeArray();
+		for (Region region: mBeaconManager.getRangedRegions()) {
+			WritableMap map = new WritableNativeMap();
+			map.putString("region", region.getUniqueId());
+			map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
+			array.pushMap(map);
+		}
+		callback.invoke(array);
+	}
 
-    @ReactMethod
-    public void getMonitoredRegions(Callback callback) {
-        WritableArray array = new WritableNativeArray();
-        for (Region region : mBeaconManager.getMonitoredRegions()) {
-            WritableMap map = new WritableNativeMap();
-            map.putString("identifier", region.getUniqueId());
-            map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
-            map.putInt("major", region.getId2() != null ? region.getId2().toInt() : 0);
-            map.putInt("minor", region.getId3() != null ? region.getId3().toInt() : 0);
-            array.pushMap(map);
-        }
-        callback.invoke(array);
-    }
-
-    @ReactMethod
-    public void getRangedRegions(Callback callback) {
-        WritableArray array = new WritableNativeArray();
-        for (Region region : mBeaconManager.getRangedRegions()) {
-            WritableMap map = new WritableNativeMap();
-            map.putString("region", region.getUniqueId());
-            map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
-            array.pushMap(map);
-        }
-        callback.invoke(array);
-    }
-
-    /***********************************************************************************************
+	/***********************************************************************************************
      * BeaconConsumer
      **********************************************************************************************/
-    @Override
-    public void onBeaconServiceConnect() {
-        Log.v(LOG_TAG, "onBeaconServiceConnect");
+	@Override
+	public void onBeaconServiceConnect() {
+		Log.v(LOG_TAG, "onBeaconServiceConnect");
 
-        // deprecated since v2.9 (see github: https://github.com/AltBeacon/android-beacon-library/releases/tag/2.9)
-        // mBeaconManager.setMonitorNotifier(mMonitorNotifier);
-        // mBeaconManager.setRangeNotifier(mRangeNotifier);
-        mBeaconManager.addMonitorNotifier(mMonitorNotifier);
-        mBeaconManager.addRangeNotifier(mRangeNotifier);
-        sendEvent(mReactContext, "beaconServiceConnected", null);
-    }
+		// deprecated since v2.9 (see github: https://github.com/AltBeacon/android-beacon-library/releases/tag/2.9)
+		// mBeaconManager.setMonitorNotifier(mMonitorNotifier);
+		// mBeaconManager.setRangeNotifier(mRangeNotifier);
+		mBeaconManager.addMonitorNotifier(mMonitorNotifier);
+		// mBeaconManager.addRangeNotifier(mRangeNotifier);
+		sendEvent(mReactContext, "beaconServiceConnected", null);
+	}
 
-    @Override
-    public Context getApplicationContext() {
-        return mApplicationContext;
-    }
+	@Override
+	public Context getApplicationContext() {
+		return mApplicationContext;
+	}
 
-    @Override
-    public void unbindService(ServiceConnection serviceConnection) {
-        mApplicationContext.unbindService(serviceConnection);
-    }
+	@Override
+	public void unbindService(ServiceConnection serviceConnection) {
+    Log.e(LOG_TAG, "Unbinding service: " + serviceConnection);
+		mApplicationContext.unbindService(serviceConnection);
+	}
 
-    @Override
-    public boolean bindService(Intent intent, ServiceConnection serviceConnection, int i) {
-        return mApplicationContext.bindService(intent, serviceConnection, i);
-    }
+	@Override
+	public boolean bindService(Intent intent, ServiceConnection serviceConnection, int i) {
+    Log.e(LOG_TAG, "Binding service: " + serviceConnection);
+		return mApplicationContext.bindService(intent, serviceConnection, i);
+	}
 
-    /***********************************************************************************************
+	/***********************************************************************************************
      * Monitoring
      **********************************************************************************************/
-    @ReactMethod
-    public void startMonitoring(String regionId, String beaconUuid, int minor, int major, Callback resolve, Callback reject) {
-        Log.d(LOG_TAG, "startMonitoring, monitoringRegionId: " + regionId + ", monitoringBeaconUuid: " + beaconUuid + ", minor: " + minor + ", major: " + major);
+	@ReactMethod
+	public void startMonitoring(String regionId, String beaconUuid, int minor, int major, Callback resolve, Callback reject) {
+		Log.d(LOG_TAG, "startMonitoring, monitoringRegionId: " + regionId + ", monitoringBeaconUuid: " + beaconUuid + ", minor: " + minor + ", major: " + major);
 
-        try {
-            Region region = createRegion(
-                    regionId,
-                    beaconUuid,
-                    String.valueOf(minor).equals("-1") ? "" : String.valueOf(minor),
-                    String.valueOf(major).equals("-1") ? "" : String.valueOf(major)
-            );
+		try {
+			Region region = createRegion(
+			regionId, beaconUuid, String.valueOf(minor).equals("-1") ? "": String.valueOf(minor), String.valueOf(major).equals("-1") ? "": String.valueOf(major));
 
-            mBeaconManager.startMonitoringBeaconsInRegion(region);
+			mBeaconManager.startMonitoringBeaconsInRegion(region);
 
-            this.MyRegion = region;
+			this.MyRegion = region;
 
-            resolve.invoke();
-        } catch (Exception e) {
-            Log.e(LOG_TAG, "startMonitoring, error: ", e);
-            reject.invoke(e.getMessage());
+			resolve.invoke();
+		} catch(Exception e) {
+			Log.e(LOG_TAG, "startMonitoring, error: ", e);
+			reject.invoke(e.getMessage());
+		}
+	}
+
+	private MonitorNotifier mMonitorNotifier = new MonitorNotifier() {@Override
+		public void didEnterRegion(Region region) {
+			Log.i(LOG_TAG, "regionDidEnter");
+
+			sendEvent(mReactContext, "regionDidEnter", createMonitoringResponse(region));
+
+			sendDebug(new JSONObject() {
+				{
+					try {
+						put("device", "android");
+						put("message", "EnterRegion");
+					} catch(JSONException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+
+			try {
+				mBeaconManager.startRangingBeaconsInRegion(MyRegion);
+			} catch(RemoteException e) {
+				e.printStackTrace();
+			}
+		}
+
+		@Override
+		public void didExitRegion(Region region) {
+			Log.i(LOG_TAG, "didExitRegion");
+			sendEvent(mReactContext, "regionDidExit", createMonitoringResponse(region));
+			sendDebug(new JSONObject() {
+				{
+					try {
+						put("device", "android");
+						put("message", "ExitRegion");
+					} catch(JSONException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+
+			sendBeacon(null);
+
+			try {
+				mBeaconManager.stopRangingBeaconsInRegion(MyRegion);
+			} catch(RemoteException e) {
+				e.printStackTrace();
+			}
+		}
+
+		@Override
+		public void didDetermineStateForRegion(int i, Region region) {
+			// Log.i(LOG_TAG, "didDetermineStateForRegion");
+			sendDebug(new JSONObject() {
+				{
+					try {
+						put("device", "android");
+						put("message", "DetermineState");
+					} catch(JSONException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+		}
+	};
+
+	private WritableMap createMonitoringResponse(Region region) {
+		WritableMap map = new WritableNativeMap();
+		map.putString("identifier", region.getUniqueId());
+		map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
+		map.putInt("major", region.getId2() != null ? region.getId2().toInt() : 0);
+		map.putInt("minor", region.getId3() != null ? region.getId3().toInt() : 0);
+		return map;
+	}
+
+	@ReactMethod
+	public void stopMonitoring(String regionId, String beaconUuid, int minor, int major, Callback resolve, Callback reject) {
+
+		Region region = createRegion(
+		regionId, beaconUuid, String.valueOf(minor).equals("-1") ? "": String.valueOf(minor), String.valueOf(major).equals("-1") ? "": String.valueOf(major)
+		// minor,
+		// major
+		);
+
+		try {
+			mBeaconManager.stopMonitoringBeaconsInRegion(region);
+			this.MyRegion = null;
+			resolve.invoke();
+		} catch(Exception e) {
+			Log.e(LOG_TAG, "stopMonitoring, error: ", e);
+			reject.invoke(e.getMessage());
+		}
+	}
+
+	@ReactMethod
+	public void stopBeaconService(Callback resolve, Callback reject) {
+		Log.e(LOG_TAG, "Stopping Beacon Service");
+		try {
+			if (mBeaconManager.isAnyConsumerBound()) {
+
+				if (Build.VERSION.SDK_INT > 26) {
+					NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+					notificationManager.deleteNotificationChannel("beacons");
+					Log.e(LOG_TAG, "Delete notif channel");
+				}
+
+				mBeaconManager.setAndroidLScanningDisabled(true);
+        mBeaconManager.removeAllMonitorNotifiers();
+        mBeaconManager.removeAllRangeNotifiers();
+        unbindManager();
+        if (!mBeaconManager.isAnyConsumerBound()) {
+          mBeaconManager.disableForegroundServiceScanning();
         }
-    }
+			}
 
-    private MonitorNotifier mMonitorNotifier = new MonitorNotifier() {
-        @Override
-        public void didEnterRegion(Region region) {
-            Log.i(LOG_TAG, "regionDidEnter");
+			// bindManager();
+			resolve.invoke();
+		} catch(Exception e) {
+			Log.e(LOG_TAG, "stopBeaconService, error: ", e);
+			reject.invoke(e.getMessage());
+		}
+	}
 
-            sendEvent(mReactContext, "regionDidEnter", createMonitoringResponse(region));
+	@ReactMethod
+	public void startBeaconService(Callback resolve, Callback reject) {
+		Log.e(LOG_TAG, "Starting Beacon Service");
+		this.mApplicationContext = mReactContext.getApplicationContext();
+		this.mBeaconManager = BeaconManager.getInstanceForApplication(mApplicationContext);
+		try {
+      // failsafe
+      // if (mBeaconManager.isAnyConsumerBound()) {
+        // unbindManager();
 
-            sendDebug(new JSONObject() {{
-                try {
-                    put("device", "android");
-                    put("message", "EnterRegion");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }});
+      // }
+			if (!mBeaconManager.isAnyConsumerBound()) {
+        // need to bind at instantiation so that service loads (to test more)
+        // mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:0-3=4c000215,i:4-19,i:20-21,i:22-23,p:24-24")); // AltBeacon
+        mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")); // IBeacon
 
-            try {
-                mBeaconManager.startRangingBeaconsInRegion(MyRegion);
-            } catch (RemoteException e) {
-                e.printStackTrace();
-            }
+				Notification.Builder builder = new Notification.Builder(mApplicationContext);
+				builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_notification", "mipmap", mApplicationContext.getPackageName()));
+				builder.setContentTitle("Scanning for Beacons");
+				Class intentClass = getMainActivityClass();
+				Intent intent = new Intent(mApplicationContext, intentClass);
+				PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+				builder.setContentIntent(pendingIntent);
+
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+					NotificationChannel channel = new NotificationChannel("beacons", "Beacons", NotificationManager.IMPORTANCE_DEFAULT);
+					channel.setDescription("Beacons ON notification");
+					NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+					notificationManager.createNotificationChannel(channel);
+          builder.setChannelId(channel.getId());
         }
+        Log.e(LOG_TAG, "Notification Channel started");
 
-        @Override
-        public void didExitRegion(Region region) {
-            Log.i(LOG_TAG, "didExitRegion");
-            sendEvent(mReactContext, "regionDidExit", createMonitoringResponse(region));
-            sendDebug(new JSONObject() {{
-                try {
-                    put("device", "android");
-                    put("message", "ExitRegion");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }});
+				mBeaconManager.enableForegroundServiceScanning(builder.build(), 456);
+				// For the above foreground scanning service to be useful, you need to disable
+				// JobScheduler-based scans (used on Android 8+) and set a fast background scan
+				// cycle that would otherwise be disallowed by the operating system.
+				//
+				mBeaconManager.setEnableScheduledScanJobs(false);
+				mBeaconManager.setBackgroundBetweenScanPeriod(0);
+				mBeaconManager.setBackgroundScanPeriod(1100);
 
-            sendBeacon(null);
+				bindManager();
+			}
+			resolve.invoke();
+		} catch(Exception e) {
+			Log.e(LOG_TAG, "startBeaconService, error: ", e);
+			reject.invoke(e.getMessage());
+		}
+	}
 
-            try {
-                mBeaconManager.stopRangingBeaconsInRegion(MyRegion);
-            } catch (RemoteException e) {
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public void didDetermineStateForRegion(int i, Region region) {
-            Log.i(LOG_TAG, "didDetermineStateForRegion");
-            sendDebug(new JSONObject() {{
-                try {
-                    put("device", "android");
-                    put("message", "DetermineState");
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }});
-        }
-    };
-
-    private WritableMap createMonitoringResponse(Region region) {
-        WritableMap map = new WritableNativeMap();
-        map.putString("identifier", region.getUniqueId());
-        map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
-        map.putInt("major", region.getId2() != null ? region.getId2().toInt() : 0);
-        map.putInt("minor", region.getId3() != null ? region.getId3().toInt() : 0);
-        return map;
-    }
-
-    @ReactMethod
-    public void stopMonitoring(String regionId, String beaconUuid, int minor, int major, Callback resolve, Callback reject) {
-      if (!mBeaconManager.isBound(this)) {
-          return;
-      }
-        Region region = createRegion(
-                regionId,
-                beaconUuid,
-                String.valueOf(minor).equals("-1") ? "" : String.valueOf(minor),
-                String.valueOf(major).equals("-1") ? "" : String.valueOf(major)
-                // minor,
-                // major
-        );
-
-        try {
-
-          if (Build.VERSION.SDK_INT > 26) {
-            NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-            notificationManager.deleteNotificationChannel("beacons");
-            Log.e(LOG_TAG, "Delete notif channel");
-          }
-
-            this.MyRegion = null;
-
-            mBeaconManager.setAndroidLScanningDisabled(true);
-            mBeaconManager.stopMonitoringBeaconsInRegion(region);
-            mBeaconManager.removeAllMonitorNotifiers();
-            if (mBeaconManager.isAnyConsumerBound()) {
-              unbindManager();
-            }
-            mBeaconManager.disableForegroundServiceScanning();
-            // bindManager();
-            resolve.invoke();
-        } catch (Exception e) {
-            Log.e(LOG_TAG, "stopMonitoring, error: ", e);
-            reject.invoke(e.getMessage());
-        }
-    }
-
-    /***********************************************************************************************
+	/***********************************************************************************************
      * Ranging
      **********************************************************************************************/
-    @ReactMethod
-    public void startRanging(String regionId, String beaconUuid, Callback resolve, Callback reject) {
-        Log.d(LOG_TAG, "startRanging, rangingRegionId: " + regionId + ", rangingBeaconUuid: " + beaconUuid);
+	@ReactMethod
+	public void startRanging(String regionId, String beaconUuid, Callback resolve, Callback reject) {
+		Log.d(LOG_TAG, "startRanging, rangingRegionId: " + regionId + ", rangingBeaconUuid: " + beaconUuid);
 
-        try {
-            Region region = createRegion(regionId, beaconUuid);
-            mBeaconManager.startRangingBeaconsInRegion(region);
-            resolve.invoke();
-        } catch (Exception e) {
-            Log.e(LOG_TAG, "startRanging, error: ", e);
-            reject.invoke(e.getMessage());
-        }
-    }
+		try {
+			Region region = createRegion(regionId, beaconUuid);
+			mBeaconManager.startRangingBeaconsInRegion(region);
+			resolve.invoke();
+		} catch(Exception e) {
+			Log.e(LOG_TAG, "startRanging, error: ", e);
+			reject.invoke(e.getMessage());
+		}
+	}
 
-    private RangeNotifier mRangeNotifier = new RangeNotifier() {
-        @Override
-        public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
-            Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, beacons: " + beacons.toString());
-            Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, region: " + region.toString());
-            sendEvent(mReactContext, "beaconsDidRange", createRangingResponse(beacons, region));
+	private RangeNotifier mRangeNotifier = new RangeNotifier() {@Override
+		public void didRangeBeaconsInRegion(Collection < Beacon > beacons, Region region) {
+			Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, beacons: " + beacons.toString());
+			Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, region: " + region.toString());
+			sendEvent(mReactContext, "beaconsDidRange", createRangingResponse(beacons, region));
 
-            final JSONArray beaconArray = new JSONArray();
-            for (final Beacon beacon : beacons) {
-                beaconArray.put(new JSONObject(){{
-                    try {
-                        put("uuid", beacon.getId1() != null ? beacon.getId1().toString() : "");
-                        put("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
-                        put("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
-                        put("rssi", beacon.getRssi());
-                        if (beacon.getDistance() == Double.POSITIVE_INFINITY
-                                || Double.isNaN(beacon.getDistance())
-                                || beacon.getDistance() == Double.NaN
-                                || beacon.getDistance() == Double.NEGATIVE_INFINITY) {
-                            put("distance", 999.0);
-                            put("proximity", "far");
-                        } else {
-                            put("distance", beacon.getDistance());
-                            put("proximity", getProximity(beacon.getDistance()));
-                        }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }});
-            }
+			final JSONArray beaconArray = new JSONArray();
+			for (final Beacon beacon: beacons) {
+				beaconArray.put(new JSONObject() {
+					{
+						try {
+							put("uuid", beacon.getId1() != null ? beacon.getId1().toString() : "");
+							put("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
+							put("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
+							put("rssi", beacon.getRssi());
+							if (beacon.getDistance() == Double.POSITIVE_INFINITY || Double.isNaN(beacon.getDistance()) || beacon.getDistance() == Double.NaN || beacon.getDistance() == Double.NEGATIVE_INFINITY) {
+								put("distance", 999.0);
+								put("proximity", "far");
+							} else {
+								put("distance", beacon.getDistance());
+								put("proximity", getProximity(beacon.getDistance()));
+							}
+						} catch(JSONException e) {
+							e.printStackTrace();
+						}
+					}
+				});
+			}
 
-            JSONArray sortedBeaconArray = null;
-            try {
-                sortedBeaconArray = this.sort(beaconArray, "distance", true);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
+			JSONArray sortedBeaconArray = null;
+			try {
+				sortedBeaconArray = this.sort(beaconArray, "distance", true);
+			} catch(JSONException e) {
+				e.printStackTrace();
+			}
 
-            if(sortedBeaconArray != null ) {
-                Log.d(LOG_TAG, "SortedBeaconArray: " + sortedBeaconArray.toString());
-            } else {
-                Log.d(LOG_TAG, "SortedBeaconArray: []");
-            }
+			if (sortedBeaconArray != null) {
+				Log.d(LOG_TAG, "SortedBeaconArray: " + sortedBeaconArray.toString());
+			} else {
+				Log.d(LOG_TAG, "SortedBeaconArray: []");
+			}
 
+			final JSONArray finalSortedBeaconArray = sortedBeaconArray;
+			sendDebug(new JSONObject() {
+				{
+					try {
+						put("device", "android");
+						put("message", "didRangeBeacons");
+						put("beacons", finalSortedBeaconArray);
+					} catch(JSONException e) {
+						e.printStackTrace();
+					}
+				}
+			});
 
-            final JSONArray finalSortedBeaconArray = sortedBeaconArray;
-            sendDebug(new JSONObject() {{
-                try {
-                    put("device", "android");
-                    put("message", "didRangeBeacons");
-                    put("beacons", finalSortedBeaconArray);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }});
+			JSONObject nearestBeacon = null;
 
-            JSONObject nearestBeacon = null;
+			if (finalSortedBeaconArray != null) {
+				try {
+					nearestBeacon = (JSONObject) finalSortedBeaconArray.get(0);
+				} catch(JSONException e) {
+					e.printStackTrace();
+				}
+			}
 
-            if(finalSortedBeaconArray != null) {
-                try {
-                    nearestBeacon = (JSONObject) finalSortedBeaconArray.get(0);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }
+			final JSONObject finalNearestBeacon = nearestBeacon;
 
-            final JSONObject finalNearestBeacon = nearestBeacon;
+			if (finalNearestBeacon != null) {
+				sendBeacon(new JSONObject() {
+					{
+						try {
+							put("uuid", finalNearestBeacon.get("uuid"));
+							put("major", finalNearestBeacon.get("major"));
+							put("minor", finalNearestBeacon.get("minor"));
+						} catch(JSONException e) {
+							e.printStackTrace();
+						}
+					}
+				});
+			} else {
+				sendBeacon(null);
+			}
 
-            if(finalNearestBeacon != null) {
-                sendBeacon(new JSONObject() {{
-                    try {
-                        put("uuid", finalNearestBeacon.get("uuid"));
-                        put("major", finalNearestBeacon.get("major"));
-                        put("minor", finalNearestBeacon.get("minor"));
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                }});
-            } else {
-                sendBeacon(null);
-            }
+			sendDebug(new JSONObject() {
+				{
+					try {
+						put("device", "android");
+						put("message", "SendBeacon");
+						put("beacon", finalNearestBeacon);
+					} catch(JSONException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+		}
 
-            sendDebug(new JSONObject() {{
-                try {
-                    put("device", "android");
-                    put("message", "SendBeacon");
-                    put("beacon", finalNearestBeacon);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-            }});
-        }
+		private JSONArray sort(JSONArray jsonArr, String sortBy, boolean sortOrder) throws JSONException {
+			JSONArray sortedJsonArray = new JSONArray();
 
-        private JSONArray sort(JSONArray jsonArr, String sortBy, boolean sortOrder) throws JSONException {
-            JSONArray sortedJsonArray = new JSONArray();
+			List < JSONObject > jsonValues = new ArrayList();
+			for (int i = 0; i < jsonArr.length(); i++) {
+				jsonValues.add(jsonArr.getJSONObject(i));
+			}
+			final String KEY_NAME = sortBy;
+			final Boolean SORT_ORDER = sortOrder;
+			Collections.sort(jsonValues, new Comparator < JSONObject > () {
 
-            List<JSONObject> jsonValues = new ArrayList();
-            for (int i = 0; i < jsonArr.length(); i++) {
-                jsonValues.add(jsonArr.getJSONObject(i));
-            }
-            final String KEY_NAME = sortBy;
-            final Boolean SORT_ORDER = sortOrder;
-            Collections.sort( jsonValues, new Comparator<JSONObject>() {
+				@Override
+				public int compare(JSONObject a, JSONObject b) {
+					Double valA = new Double( - 1);
+					Double valB = new Double( - 1);
 
-                @Override
-                public int compare(JSONObject a, JSONObject b) {
-                    Double valA = new Double(-1);
-                    Double valB = new Double(-1);
+					try {
+						valA = (Double) a.get(KEY_NAME);
+						valB = (Double) b.get(KEY_NAME);
+					}
+					catch(JSONException e) {
+						//exception
+					}
+					if (SORT_ORDER) {
+						return valA.compareTo(valB);
+					} else {
+						return - valA.compareTo(valB);
+					}
+				}
+			});
 
-                    try {
-                        valA = (Double) a.get(KEY_NAME);
-                        valB = (Double) b.get(KEY_NAME);
-                    }
-                    catch (JSONException e) {
-                        //exception
-                    }
-                    if (SORT_ORDER) {
-                        return valA.compareTo(valB);
-                    } else {
-                        return -valA.compareTo(valB);
-                    }
-                }
-            });
+			for (int i = 0; i < jsonArr.length(); i++) {
+				sortedJsonArray.put(jsonValues.get(i));
+			}
 
-            for (int i = 0; i < jsonArr.length(); i++) {
-                sortedJsonArray.put(jsonValues.get(i));
-            }
+			return sortedJsonArray;
+		}
+	};
 
-            return sortedJsonArray;
-        }
-    };
+	private WritableMap createRangingResponse(Collection < Beacon > beacons, Region region) {
+		WritableMap map = new WritableNativeMap();
+		map.putString("identifier", region.getUniqueId());
+		map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
+		WritableArray a = new WritableNativeArray();
+		for (Beacon beacon: beacons) {
+			WritableMap b = new WritableNativeMap();
+			b.putString("uuid", beacon.getId1() != null ? beacon.getId1().toString() : "");
+			if (beacon.getIdentifiers().size() > 2) {
+				b.putInt("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
+				b.putInt("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
+			}
+			b.putInt("rssi", beacon.getRssi());
+			if (beacon.getDistance() == Double.POSITIVE_INFINITY || Double.isNaN(beacon.getDistance()) || beacon.getDistance() == Double.NaN || beacon.getDistance() == Double.NEGATIVE_INFINITY) {
+				b.putDouble("distance", 999.0);
+				b.putString("proximity", "far");
+			} else {
+				b.putDouble("distance", beacon.getDistance());
+				b.putString("proximity", getProximity(beacon.getDistance()));
+			}
+			a.pushMap(b);
+		}
+		map.putArray("beacons", a);
+		return map;
+	}
 
-    private WritableMap createRangingResponse(Collection<Beacon> beacons, Region region) {
-        WritableMap map = new WritableNativeMap();
-        map.putString("identifier", region.getUniqueId());
-        map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
-        WritableArray a = new WritableNativeArray();
-        for (Beacon beacon : beacons) {
-            WritableMap b = new WritableNativeMap();
-            b.putString("uuid", beacon.getId1() != null ? beacon.getId1().toString() : "");
-            if (beacon.getIdentifiers().size() > 2) {
-                b.putInt("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
-                b.putInt("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
-            }
-            b.putInt("rssi", beacon.getRssi());
-            if (beacon.getDistance() == Double.POSITIVE_INFINITY
-                    || Double.isNaN(beacon.getDistance())
-                    || beacon.getDistance() == Double.NaN
-                    || beacon.getDistance() == Double.NEGATIVE_INFINITY) {
-                b.putDouble("distance", 999.0);
-                b.putString("proximity", "far");
-            } else {
-                b.putDouble("distance", beacon.getDistance());
-                b.putString("proximity", getProximity(beacon.getDistance()));
-            }
-            a.pushMap(b);
-        }
-        map.putArray("beacons", a);
-        return map;
-    }
+	private String getProximity(double distance) {
+		if (distance == -1.0) {
+			return "unknown";
+		} else if (distance < 1) {
+			return "immediate";
+		} else if (distance < 3) {
+			return "near";
+		} else {
+			return "far";
+		}
+	}
 
-    private String getProximity(double distance) {
-        if (distance == -1.0) {
-            return "unknown";
-        } else if (distance < 1) {
-            return "immediate";
-        } else if (distance < 3) {
-            return "near";
-        } else {
-            return "far";
-        }
-    }
+	@ReactMethod
+	public void stopRanging(String regionId, String beaconUuid, Callback resolve, Callback reject) {
+		if (!mBeaconManager.isBound(this)) {
+			return;
+		}
 
-    @ReactMethod
-    public void stopRanging(String regionId, String beaconUuid, Callback resolve, Callback reject) {
-        if (!mBeaconManager.isBound(this)) {
-            return;
-        }
+		Region region = createRegion(regionId, beaconUuid);
+		try {
+			mBeaconManager.stopRangingBeaconsInRegion(region);
+			resolve.invoke();
+		} catch(Exception e) {
+			Log.e(LOG_TAG, "stopRanging, error: ", e);
+			reject.invoke(e.getMessage());
+		}
+	}
 
-        Region region = createRegion(regionId, beaconUuid);
-        try {
-            mBeaconManager.stopRangingBeaconsInRegion(region);
-            resolve.invoke();
-        } catch (Exception e) {
-            Log.e(LOG_TAG, "stopRanging, error: ", e);
-            reject.invoke(e.getMessage());
-        }
-    }
+	@ReactMethod
+	public void setDebugApi(String debugApi) {
+		Log.e(LOG_TAG, "setDebugApi " + debugApi);
+		this.debugApi = debugApi;
+	}
 
-    @ReactMethod
-    public void setDebugApi(String debugApi) {
-        Log.e(LOG_TAG, "setDebugApi " + debugApi);
-        this.debugApi = debugApi;
-    }
+	@ReactMethod
+	public void setRequestToken(String token) {
+		Log.e(LOG_TAG, "setRequestToken " + token);
+		this.requestToken = token;
+	}
 
-    @ReactMethod
-    public void setRequestToken(String token) {
-        Log.e(LOG_TAG, "setRequestToken " + token);
-        this.requestToken = token;
-    }
+	@ReactMethod
+	public void setBeaconRequestApi(String requestApi) {
+		Log.e(LOG_TAG, "setBeaconRequestApi " + requestApi);
+		this.beaconRequestApi = requestApi;
+	}
 
-    @ReactMethod
-    public void setBeaconRequestApi(String requestApi) {
-        Log.e(LOG_TAG, "setBeaconRequestApi " + requestApi);
-        this.beaconRequestApi = requestApi;
-    }
+	@ReactMethod
+	public void setUserId(String userId) {
+		Log.e(LOG_TAG, "setUserId " + userId);
+	}
 
-    @ReactMethod
-    public void setUserId(String userId) {
-        Log.e(LOG_TAG, "setUserId " + userId);
-    }
+	@ReactMethod
+	public void setNotificationDelay(Number notificationDelay) {
+		Log.e(LOG_TAG, "setNotificationDelay " + notificationDelay);
+	}
 
-    @ReactMethod
-    public void setNotificationDelay(Number notificationDelay) {
-        Log.e(LOG_TAG, "setNotificationDelay " + notificationDelay);
-    }
-
-
-    /***********************************************************************************************
+	/***********************************************************************************************
      * Utils
      **********************************************************************************************/
-    private void sendEvent(ReactContext reactContext, String eventName, @Nullable WritableMap params) {
-        if (reactContext.hasActiveCatalystInstance()) {
-            reactContext
-                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                    .emit(eventName, params);
-        }
-    }
+	private void sendEvent(ReactContext reactContext, String eventName, @Nullable WritableMap params) {
+		if (reactContext.hasActiveCatalystInstance()) {
+			reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
+		}
+	}
 
-    private Region createRegion(String regionId, String beaconUuid) {
-        Identifier id1 = (beaconUuid == null) ? null : Identifier.parse(beaconUuid);
-        return new Region(regionId, id1, null, null);
-    }
+	private Region createRegion(String regionId, String beaconUuid) {
+		Identifier id1 = (beaconUuid == null) ? null: Identifier.parse(beaconUuid);
+		return new Region(regionId, id1, null, null);
+	}
 
-    private Region createRegion(String regionId, String beaconUuid, String minor, String major) {
-        Identifier id1 = (beaconUuid == null) ? null : Identifier.parse(beaconUuid);
-        return new Region(
-                regionId,
-                id1,
-                major.length() > 0 ? Identifier.parse(major) : null,
-                minor.length() > 0 ? Identifier.parse(minor) : null
-        );
-    }
+	private Region createRegion(String regionId, String beaconUuid, String minor, String major) {
+		Identifier id1 = (beaconUuid == null) ? null: Identifier.parse(beaconUuid);
+		return new Region(
+		regionId, id1, major.length() > 0 ? Identifier.parse(major) : null, minor.length() > 0 ? Identifier.parse(minor) : null);
+	}
 
-    private Class getMainActivityClass() {
-        String packageName = mApplicationContext.getPackageName();
-        Intent launchIntent = mApplicationContext.getPackageManager().getLaunchIntentForPackage(packageName);
-        String className = launchIntent.getComponent().getClassName();
-        try {
-            return Class.forName(className);
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
+	private Class getMainActivityClass() {
+		String packageName = mApplicationContext.getPackageName();
+		Intent launchIntent = mApplicationContext.getPackageManager().getLaunchIntentForPackage(packageName);
+		String className = launchIntent.getComponent().getClassName();
+		try {
+			return Class.forName(className);
+		} catch(ClassNotFoundException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
 
-    private void checkOrCreateChannel(NotificationManager manager) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O)
-            return;
-        if (channelCreated)
-            return;
-        if (manager == null)
-            return;
+	private void checkOrCreateChannel(NotificationManager manager) {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+		if (channelCreated) return;
+		if (manager == null) return;
 
-        @SuppressLint("WrongConstant") NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, "Smart_Space_Pro_Channel", android.app.NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("Smart_Space_Pro_Channel_Description");
-        channel.enableLights(true);
-        channel.enableVibration(true);
+		@SuppressLint("WrongConstant") NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID, "Smart_Space_Pro_Channel", android.app.NotificationManager.IMPORTANCE_HIGH);
+		channel.setDescription("Smart_Space_Pro_Channel_Description");
+		channel.enableLights(true);
+		channel.enableVibration(true);
 
-        manager.createNotificationChannel(channel);
-        channelCreated = true;
-    }
+		manager.createNotificationChannel(channel);
+		channelCreated = true;
+	}
 
-    private Boolean isActivityRunning(Class activityClass) {
-        ActivityManager activityManager = (ActivityManager) mApplicationContext.getSystemService(Context.ACTIVITY_SERVICE);
-        List<ActivityManager.RunningTaskInfo> tasks = activityManager.getRunningTasks(Integer.MAX_VALUE);
+	private Boolean isActivityRunning(Class activityClass) {
+		ActivityManager activityManager = (ActivityManager) mApplicationContext.getSystemService(Context.ACTIVITY_SERVICE);
+		List < ActivityManager.RunningTaskInfo > tasks = activityManager.getRunningTasks(Integer.MAX_VALUE);
 
-        for (ActivityManager.RunningTaskInfo task : tasks) {
-            if (activityClass.getCanonicalName().equalsIgnoreCase(task.baseActivity.getClassName()))
-                return true;
-        }
+		for (ActivityManager.RunningTaskInfo task: tasks) {
+			if (activityClass.getCanonicalName().equalsIgnoreCase(task.baseActivity.getClassName())) return true;
+		}
 
-        return false;
-    }
+		return false;
+	}
 
-    private void sendDebug(JSONObject data) {
-        final String debugApi  = this.debugApi;
-        new BeaconDebugRequest().execute(data, new JSONObject() {{
-            try {
-                put("debugApi", debugApi);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }});
-    }
+	private void sendDebug(JSONObject data) {
+		final String debugApi = this.debugApi;
+		new BeaconDebugRequest().execute(data, new JSONObject() {
+			{
+				try {
+					put("debugApi", debugApi);
+				} catch(JSONException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+	}
 
-    private void sendBeacon(JSONObject data) {
-        final String beaconRequestApi  = this.beaconRequestApi;
-        final String requestToken  = this.requestToken;
-        new BeaconRequest().execute(data, new JSONObject() {{
-            try {
-                put("beaconRequestApi", beaconRequestApi);
-                put("requestToken", requestToken);
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }});
-    }
+	private void sendBeacon(JSONObject data) {
+		final String beaconRequestApi = this.beaconRequestApi;
+		final String requestToken = this.requestToken;
+		new BeaconRequest().execute(data, new JSONObject() {
+			{
+				try {
+					put("beaconRequestApi", beaconRequestApi);
+					put("requestToken", requestToken);
+				} catch(JSONException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+	}
 }
