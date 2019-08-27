@@ -447,8 +447,12 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
         mBeaconManager.enableForegroundServiceScanning(builder.build(), 12345);
         mBeaconManager.setEnableScheduledScanJobs(false);
-        mBeaconManager.setBackgroundBetweenScanPeriod(0);
-        mBeaconManager.setBackgroundScanPeriod(1100);
+        mBeaconManager.setBackgroundScanPeriod(10000);
+        mBeaconManager.setBackgroundBetweenScanPeriod(20000);
+        mBeaconManager.setForegroundScanPeriod(10000);
+        mBeaconManager.setForegroundBetweenScanPeriod(10000);
+        mBeaconManager.updateScanPeriods();
+
 
         Log.e(LOG_TAG, "Foreground Service started");
 				bindManager();
@@ -698,6 +702,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
      * Utils
      **********************************************************************************************/
 	private void sendEvent(ReactContext reactContext, String eventName, @Nullable WritableMap params) {
+    Log.e(LOG_TAG, "SEND EVENT");
 		if (reactContext.hasActiveCatalystInstance()) {
 			reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
 		}
