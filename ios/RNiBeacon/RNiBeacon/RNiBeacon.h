@@ -12,7 +12,5 @@
 #import <React/RCTEventEmitter.h>
 
 @interface RNiBeacon : RCTEventEmitter <RCTBridgeModule>
-+ (RNiBeacon *)sharedInstance;
-+ (void)applicationWillTerminate:(UIApplication *)application;
-    
+
 @end
