@@ -374,6 +374,15 @@ RCT_EXPORT_METHOD(setNotificationDelay:(int)notificationDelay)
     sharedInstance.notiDelay = notificationDelay;
 }
 
+RCT_EXPORT_METHOD(getMissedBeacon) {
+    NSLog(@"[Beacon] Send Missing Beacon");
+    if (self.missedBeacon != nil) {
+      [self sendEventWithName:@"onMissedBeacon" body: self.missedBeacon];
+    } else {
+      self.missedBeacon = nil;
+    }
+}
+
 
 -(NSString *)nameForAuthorizationStatus:(CLAuthorizationStatus)authorizationStatus
     {
@@ -505,11 +514,6 @@ RCT_EXPORT_METHOD(setNotificationDelay:(int)notificationDelay)
 
         [self sendEventWithName:@"beaconsDidRange" body:event];
     }
-
-RCT_EXPORT_METHOD(getMissedBeacon) {
-    [self sendEventWithName:@"onMissedBeacon" body: self.missedBeacon];
-    self.missedBeacon = nil;
-}
 
 -(void)locationManager:(CLLocationManager *)manager
         didEnterRegion:(CLBeaconRegion *)region {
