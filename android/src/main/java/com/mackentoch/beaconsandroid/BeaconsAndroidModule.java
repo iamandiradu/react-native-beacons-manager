@@ -49,6 +49,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements BeaconConsumer {
 	private static final String LOG_TAG = "BeaconsAndroidModule";
@@ -62,7 +64,9 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	private String debugApi = null;
 	private String requestToken = null;
 	private String beaconRequestApi = null;
-	private Region MyRegion = null;
+  private Region MyRegion = null;
+
+  Set<String> mBeaconsProcessed = new HashSet<>();
 
 	public BeaconsAndroidModule(ReactApplicationContext reactContext) {
 		super(reactContext);
@@ -303,20 +307,28 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
 	private MonitorNotifier mMonitorNotifier = new MonitorNotifier() {@Override
 		public void didEnterRegion(Region region) {
-			Log.i(LOG_TAG, "regionDidEnter");
 
-			sendEvent(mReactContext, "regionDidEnter", createMonitoringResponse(region));
+      // Only process this beacon if we have not done so before
+      if (region.getId1() != null && !mBeaconsProcessed.contains(region.getId1().toString())) {
+        Log.i(LOG_TAG, "regionDidEnter");
 
-			sendDebug(new JSONObject() {
-				{
-					try {
-						put("device", "android");
-						put("message", "EnterRegion");
-					} catch(JSONException e) {
-						e.printStackTrace();
-					}
-				}
-			});
+        sendEvent(mReactContext, "regionDidEnter", createMonitoringResponse(region));
+        // Mark this beacon as having already been processed.
+        mBeaconsProcessed.add(region.getId1().toString());
+      } else {
+        Log.i(LOG_TAG, "regionDidEnter, but Beacon already detected once");
+      }
+
+      sendDebug(new JSONObject() {
+        {
+          try {
+            put("device", "android");
+            put("message", "EnterRegion");
+          } catch(JSONException e) {
+            e.printStackTrace();
+          }
+        }
+      });
 
 			try {
 				mBeaconManager.startRangingBeaconsInRegion(MyRegion);
@@ -397,12 +409,12 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 		Log.e(LOG_TAG, "Stopping Beacon Service");
 		try {
       if (toggled.booleanValue()) {
-        if (Build.VERSION.SDK_INT > 26) {
-					NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-					notificationManager.deleteNotificationChannel("beacons");
-          Log.e(LOG_TAG, "Delete notif channel");
-          unbindManager();
-				}
+        // if (Build.VERSION.SDK_INT > 26) {
+				// 	NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+				// 	notificationManager.deleteNotificationChannel("beacons");
+        //   Log.e(LOG_TAG, "Delete notif channel");
+        //   unbindManager();
+				// }
       } else {
         unbindManager();
         mBeaconManager.disableForegroundServiceScanning();
@@ -428,33 +440,34 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
       if (!mBeaconManager.isAnyConsumerBound()) {
         mBeaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24")); // IBeacon
 
-				Notification.Builder builder = new Notification.Builder(mApplicationContext);
-				builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_notification", "mipmap", mApplicationContext.getPackageName()));
-				builder.setContentTitle("Scanning for Beacons");
-				Class intentClass = getMainActivityClass();
-				Intent intent = new Intent(mApplicationContext, intentClass);
-				PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-				builder.setContentIntent(pendingIntent);
+				// Notification.Builder builder = new Notification.Builder(mApplicationContext);
+				// builder.setSmallIcon(mApplicationContext.getResources().getIdentifier("ic_notification", "mipmap", mApplicationContext.getPackageName()));
+				// builder.setContentTitle("Scanning for Beacons");
+				// Class intentClass = getMainActivityClass();
+				// Intent intent = new Intent(mApplicationContext, intentClass);
+				// PendingIntent pendingIntent = PendingIntent.getActivity(mApplicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+				// builder.setContentIntent(pendingIntent);
 
-				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-					NotificationChannel channel = new NotificationChannel("beacons", "Beacons", NotificationManager.IMPORTANCE_DEFAULT);
-					channel.setDescription("Beacons ON notification");
-					NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-					notificationManager.createNotificationChannel(channel);
-          builder.setChannelId(channel.getId());
-        }
-        Log.e(LOG_TAG, "Notification Channel started");
+				// if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+				// 	NotificationChannel channel = new NotificationChannel("beacons", "Beacons", NotificationManager.IMPORTANCE_DEFAULT);
+				// 	channel.setDescription("Beacons ON notification");
+				// 	NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+				// 	notificationManager.createNotificationChannel(channel);
+        //   builder.setChannelId(channel.getId());
+        // }
+        // Log.e(LOG_TAG, "Notification Channel started");
 
-        mBeaconManager.enableForegroundServiceScanning(builder.build(), 12345);
+        // mBeaconManager.enableForegroundServiceScanning(builder.build(), 12345);
+        mBeaconManager.disableForegroundServiceScanning();
         mBeaconManager.setEnableScheduledScanJobs(false);
         mBeaconManager.setBackgroundScanPeriod(10000);
         mBeaconManager.setBackgroundBetweenScanPeriod(20000);
-        mBeaconManager.setForegroundScanPeriod(10000);
-        mBeaconManager.setForegroundBetweenScanPeriod(10000);
+        // mBeaconManager.setForegroundScanPeriod(10000);
+        // mBeaconManager.setForegroundBetweenScanPeriod(10000);
         mBeaconManager.updateScanPeriods();
 
 
-        Log.e(LOG_TAG, "Foreground Service started");
+        Log.e(LOG_TAG, "background Service started");
 				bindManager();
       }
 			resolve.invoke();
