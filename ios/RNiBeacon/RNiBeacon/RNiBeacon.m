@@ -16,7 +16,7 @@
 
 bool hasListeners = NO;
 
-@interface RNiBeacon() <CLLocationManagerDelegate>
+@interface RNiBeacon() <CLLocationManagerDelegate, NSObject>
 
 @property (strong, nonatomic) CLLocationManager *locationManager;
 @property (assign, nonatomic) BOOL dropEmptyRanges;
@@ -361,7 +361,7 @@ RCT_EXPORT_METHOD(setNotificationDelay:(int)notificationDelay)
 
 RCT_EXPORT_METHOD(getMissedBeacon) {
     NSLog(@"[Beacon] Send Missing Beacon");
-    if (self.missedBeacon != nil) {
+    if (self.missedBeacon != nil && hasListeners && self.bridge) {
       [self sendEventWithName:@"onMissedBeacon" body: self.missedBeacon];
     } else {
       self.missedBeacon = nil;
@@ -400,7 +400,9 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
 -(void)locationManager:(CLLocationManager *)manager didChangeAuthorizationStatus:(CLAuthorizationStatus)status
     {
         NSString *statusName = [self nameForAuthorizationStatus:status];
-        [self sendEventWithName:@"authorizationStatusDidChange" body:statusName];
+        if (hasListeners && self.bridge) {
+          [self sendEventWithName:@"authorizationStatusDidChange" body:statusName];
+        }
     }
 
 -(void)locationManager:(CLLocationManager *)manager rangingBeaconsDidFailForRegion:(CLBeaconRegion *)region withError:(NSError *)error
@@ -438,7 +440,9 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
                          [self stringForState:state], @"state",
                          nil]];
 
-        [self sendEventWithName:@"didDetermineState" body:event];
+        if (hasListeners && self.bridge) {
+          [self sendEventWithName:@"didDetermineState" body:event];
+        }
 
         switch (state) {
             case CLRegionStateInside:
@@ -497,7 +501,9 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
             [self sendBeacon:[beaconArray firstObject]];
         }
 
-        [self sendEventWithName:@"beaconsDidRange" body:event];
+        if (hasListeners && self.bridge) {
+          [self sendEventWithName:@"beaconsDidRange" body:event];
+        }
     }
 
 -(void)locationManager:(CLLocationManager *)manager
@@ -506,7 +512,7 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                      @"EnterRegion", @"message",
                      nil]];
-    if (hasListeners) {
+    if (hasListeners && self.bridge) {
       [self sendEventWithName:@"regionDidEnter" body:event];
     } else {
       self.missedBeacon = event;
@@ -521,7 +527,9 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
                      @"ExitRegion", @"message",
                      nil]];
 
-    [self sendEventWithName:@"regionDidExit" body:event];
+    if (hasListeners && self.bridge) {
+      [self sendEventWithName:@"regionDidExit" body:event];
+    }
 }
 
 + (BOOL)requiresMainQueueSetup
