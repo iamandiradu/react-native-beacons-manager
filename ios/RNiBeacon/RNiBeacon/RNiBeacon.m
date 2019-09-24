@@ -255,9 +255,13 @@ RCT_EXPORT_METHOD(getMonitoredRegions:(RCTResponseSenderBlock)callback)
 
 RCT_EXPORT_METHOD(startMonitoringForRegion:(NSDictionary *) dict)
 {
-    [self.locationManager startMonitoringSignificantLocationChanges];
-    self.MyRegion = [dict copy];
-    [self.locationManager startMonitoringForRegion:[self convertDictToBeaconRegion:dict]];
+    if ([dict[@"identifier"] isEqualToString:kEddystoneRegionID]) {
+        [_eddyStoneScanner startScanning];
+    } else {
+      [self.locationManager startMonitoringSignificantLocationChanges];
+      self.MyRegion = [dict copy];
+      [self.locationManager startMonitoringForRegion:[self convertDictToBeaconRegion:dict]];
+    }
 
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                      @"StartMonitoringForRegion", @"message",
@@ -278,9 +282,14 @@ RCT_EXPORT_METHOD(startRangingBeaconsInRegion:(NSDictionary *) dict)
 
 RCT_EXPORT_METHOD(stopMonitoringForRegion:(NSDictionary *) dict)
 {
-    [self.locationManager stopMonitoringSignificantLocationChanges];
-    self.MyRegion = nil;
-    [self.locationManager stopMonitoringForRegion:[self convertDictToBeaconRegion:dict]];
+    if ([dict[@"identifier"] isEqualToString:kEddystoneRegionID]) {
+        [self.eddyStoneScanner stopScanning];
+    } else {
+      [self.locationManager stopMonitoringSignificantLocationChanges];
+      self.MyRegion = nil;
+      [self.locationManager stopMonitoringForRegion:[self convertDictToBeaconRegion:dict]];
+    }
+
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                      @"StopMonitoringForRegion", @"message",
                      nil]];
@@ -563,16 +572,16 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
     for (id key in beacons) {
         ESSBeaconInfo *beacon = key;
         NSDictionary *info = [self getEddyStoneInfo:beacon];
-        [beaconArray addObject:info];
+        // TODO: Store Eddystone here maybe?
+        // [beaconArray addObject:info];
+        NSDictionary *event = @{
+          @"identifier": info.identifier,
+          @"uuid": info.uuid,
+          },
+        // @"beacons": beaconArray
+        };
+      [self sendEventWithName:@"eddystoneBeacon" body:event];
     }
-    NSDictionary *event = @{
-                            @"region": @{
-                                    @"identifier": kEddystoneRegionID,
-                                    @"uuid": @"", // do not use for eddy stone
-                                    },
-                            @"beacons": beaconArray
-                            };
-    [self sendEventWithName:@"beaconsDidRange" body:event];
 }
 
 - (NSDictionary*)getEddyStoneInfo:(id)beaconInfo {
@@ -580,12 +589,12 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
     NSNumber *distance = [self calculateDistance:info.txPower rssi:info.RSSI];
     NSString *identifier = [self getEddyStoneUUID:info.beaconID.beaconID];
     NSDictionary *beaconData = @{
-                                 @"identifier": identifier,
-                                 @"uuid": identifier,
-                                 @"rssi": info.RSSI,
-                                 @"txPower": info.txPower,
-                                 @"distance": distance,
-                                 };
+      @"identifier": identifier,
+      @"uuid": identifier,
+      @"rssi": info.RSSI,
+      @"txPower": info.txPower,
+      @"distance": distance,
+      };
     return beaconData;
 }
 
