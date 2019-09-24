@@ -38,6 +38,7 @@ static NSString *const kEddystoneRegionID = @"EDDY_STONE_REGION_ID";
 @property int notiDelay;
 @property int sendPeriod;
 @property NSDictionary *missedBeacon;
+@property NSMutableArray *beaconsProcessed;
 
 @end
 
@@ -73,7 +74,7 @@ RCT_EXPORT_MODULE()
             self.MyRegion = nil;
             self.debugApiEndpoint = @"";
             self.missedBeacon = nil;
-
+            self.beaconsProcessed = [[NSMutableArray alloc] init];
         }
 
         return self;
@@ -264,7 +265,7 @@ RCT_EXPORT_METHOD(startMonitoringForRegion:(NSDictionary *) dict)
     }
 
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
-                     @"StartMonitoringForRegion", @"message",
+                     @"[Beacon] StartMonitoringForRegion", @"message",
                      nil]];
 }
 
@@ -276,7 +277,7 @@ RCT_EXPORT_METHOD(startRangingBeaconsInRegion:(NSDictionary *) dict)
         [self.locationManager startRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
     }
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
-                     @"StartRangingForRegion", @"message",
+                     @"[Beacon] StartRangingForRegion", @"message",
                      nil]];
 }
 
@@ -572,16 +573,18 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
     for (id key in beacons) {
         ESSBeaconInfo *beacon = key;
         NSDictionary *info = [self getEddyStoneInfo:beacon];
-        // TODO: Store Eddystone here maybe?
-        // [beaconArray addObject:info];
-        NSDictionary *event = @{
-          @"identifier": info.identifier,
-          @"uuid": info.uuid,
-          },
-        // @"beacons": beaconArray
-        };
-      [self sendEventWithName:@"eddystoneBeacon" body:event];
-    }
+        NSString *uuid = info[@"uuid"];
+
+        BOOL isBeaconAlreadyProcessed = [self.beaconsProcessed containsObject: uuid];
+
+        if (hasListeners && self.bridge && !isBeaconAlreadyProcessed) {
+          [self sendEventWithName:@"regionDidEnter" body: info];
+          [self.beaconsProcessed addObject: uuid];
+          NSLog(@"[Beacon] UUID: %@", uuid);
+        } else {
+          NSLog(@"[Beacon] Beacon already processed, SKIP!: %@", uuid);
+        }
+      }
 }
 
 - (NSDictionary*)getEddyStoneInfo:(id)beaconInfo {
