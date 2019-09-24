@@ -715,8 +715,9 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
      * Utils
      **********************************************************************************************/
 	private void sendEvent(ReactContext reactContext, String eventName, @Nullable WritableMap params) {
-    Log.e(LOG_TAG, "SEND EVENT");
+    Log.e(LOG_TAG, "SHOULD SEND EVENT");
 		if (reactContext.hasActiveCatalystInstance()) {
+      Log.e(LOG_TAG, "EVENT SENT");
 			reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
 		}
 	}
