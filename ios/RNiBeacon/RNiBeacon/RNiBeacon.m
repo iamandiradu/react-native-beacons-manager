@@ -11,14 +11,20 @@
 #import <React/RCTBridge.h>
 #import <React/RCTConvert.h>
 #import <React/RCTEventDispatcher.h>
+#import "ESSBeaconScanner.h"
+#import "ESSEddystone.h"
 
 #import "RNiBeacon.h"
 
 bool hasListeners = NO;
 
-@interface RNiBeacon() <CLLocationManagerDelegate, NSObject>
+
+static NSString *const kEddystoneRegionID = @"EDDY_STONE_REGION_ID";
+
+@interface RNiBeacon() <CLLocationManagerDelegate, ESSBeaconScannerDelegate>
 
 @property (strong, nonatomic) CLLocationManager *locationManager;
+@property (strong, nonatomic) ESSBeaconScanner *eddyStoneScanner;
 @property (assign, nonatomic) BOOL dropEmptyRanges;
 @property NSString *debugApiEndpoint;
 @property NSDate *lastApiSendDate;
@@ -62,6 +68,8 @@ RCT_EXPORT_MODULE()
             self.locationManager.distanceFilter = 0.1; // meters
             self.locationManager.activityType = CLActivityTypeAutomotiveNavigation;
             self.locationManager.desiredAccuracy = kCLLocationAccuracyBest;
+            self.eddyStoneScanner = [[ESSBeaconScanner alloc] init];
+            self.eddyStoneScanner.delegate = self;
             self.MyRegion = nil;
             self.debugApiEndpoint = @"";
             self.missedBeacon = nil;
@@ -258,7 +266,11 @@ RCT_EXPORT_METHOD(startMonitoringForRegion:(NSDictionary *) dict)
 
 RCT_EXPORT_METHOD(startRangingBeaconsInRegion:(NSDictionary *) dict)
 {
-    [self.locationManager startRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+    if ([dict[@"identifier"] isEqualToString:kEddystoneRegionID]) {
+        [_eddyStoneScanner startScanning];
+    } else {
+        [self.locationManager startRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+    }
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                      @"StartRangingForRegion", @"message",
                      nil]];
@@ -276,7 +288,11 @@ RCT_EXPORT_METHOD(stopMonitoringForRegion:(NSDictionary *) dict)
 
 RCT_EXPORT_METHOD(stopRangingBeaconsInRegion:(NSDictionary *) dict)
 {
-    [self.locationManager stopRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+    if ([dict[@"identifier"] isEqualToString:kEddystoneRegionID]) {
+        [self.eddyStoneScanner stopScanning];
+    } else {
+        [self.locationManager stopRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+    }
     [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                      @"StopRangingForRegion", @"message",
                      nil]];
@@ -537,6 +553,42 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
         return YES;
     }
 
+- (void)beaconScanner:(ESSBeaconScanner *)scanner didRangeBeacon:(NSArray *)beacons {
+    [self notifyAboutBeaconChanges:beacons];
+}
+
+- (void)notifyAboutBeaconChanges:(NSArray *)beacons {
+    NSMutableArray *beaconArray = [[NSMutableArray alloc] init];
+
+    for (id key in beacons) {
+        ESSBeaconInfo *beacon = key;
+        NSDictionary *info = [self getEddyStoneInfo:beacon];
+        [beaconArray addObject:info];
+    }
+    NSDictionary *event = @{
+                            @"region": @{
+                                    @"identifier": kEddystoneRegionID,
+                                    @"uuid": @"", // do not use for eddy stone
+                                    },
+                            @"beacons": beaconArray
+                            };
+    [self sendEventWithName:@"beaconsDidRange" body:event];
+}
+
+- (NSDictionary*)getEddyStoneInfo:(id)beaconInfo {
+    ESSBeaconInfo *info = beaconInfo;
+    NSNumber *distance = [self calculateDistance:info.txPower rssi:info.RSSI];
+    NSString *identifier = [self getEddyStoneUUID:info.beaconID.beaconID];
+    NSDictionary *beaconData = @{
+                                 @"identifier": identifier,
+                                 @"uuid": identifier,
+                                 @"rssi": info.RSSI,
+                                 @"txPower": info.txPower,
+                                 @"distance": distance,
+                                 };
+    return beaconData;
+}
+
 - (NSNumber*)calculateDistance:(NSNumber*)txPower rssi:(NSNumber*) rssi {
     if ([rssi floatValue] >= 0){
         return [NSNumber numberWithInt:-1];
@@ -551,9 +603,29 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
     return [NSNumber numberWithFloat:distance];
 }
 
+- (NSString *)getEddyStoneUUID:(NSData*)data {
+    const unsigned char *dataBuffer = (const unsigned char *)[data bytes];
+    const int EDDYSTONE_UUID_LENGTH = 10;
+    if (!dataBuffer) {
+        return [NSString string];
+    }
+
+    NSMutableString *hexString  = [NSMutableString stringWithCapacity:(data.length * 2)];
+    [hexString appendString:@"0x"];
+    for (int i = 0; i < EDDYSTONE_UUID_LENGTH; ++i) {
+        [hexString appendString:[NSString stringWithFormat:@"%02lx", (unsigned long)dataBuffer[i]]];
+    }
+
+    return [NSString stringWithString:hexString];
+}
+
 -(void)startRanging: (NSDictionary *)dict {
     if(dict != nil) {
-        [self.locationManager startRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+        if ([dict[@"identifier"] isEqualToString:kEddystoneRegionID]) {
+            [_eddyStoneScanner startScanning];
+        } else {
+            [self.locationManager startRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+        }
         [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                          @"StartRangingForRegion", @"message",
                          nil]];
@@ -562,7 +634,11 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
 
 -(void)stopRanging: (NSDictionary *)dict {
     if(dict != nil) {
-        [self.locationManager stopRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+        if ([dict[@"identifier"] isEqualToString:kEddystoneRegionID]) {
+            [self.eddyStoneScanner stopScanning];
+        } else {
+            [self.locationManager stopRangingBeaconsInRegion:[self convertDictToBeaconRegion:dict]];
+        }
         [self sendDebug:[[NSDictionary alloc] initWithObjectsAndKeys:
                          @"StopRangingForRegion", @"message",
                          nil]];
