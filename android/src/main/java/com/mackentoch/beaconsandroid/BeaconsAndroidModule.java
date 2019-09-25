@@ -308,16 +308,17 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	private MonitorNotifier mMonitorNotifier = new MonitorNotifier() {@Override
 		public void didEnterRegion(Region region) {
 
+      // Uncomment below if no repeteing events for the same beacon is wanted
       // Only process this beacon if we have not done so before
-      if (region.getId1() != null && !mBeaconsProcessed.contains(region.getId1().toString())) {
+      // if (region.getId1() != null && !mBeaconsProcessed.contains(region.getId1().toString())) {
         Log.i(LOG_TAG, "regionDidEnter");
 
         sendEvent(mReactContext, "regionDidEnter", createMonitoringResponse(region));
         // Mark this beacon as having already been processed.
         mBeaconsProcessed.add(region.getId1().toString());
-      } else {
-        Log.i(LOG_TAG, "regionDidEnter, but Beacon already detected once");
-      }
+      // } else {
+      //   Log.i(LOG_TAG, "regionDidEnter, but Beacon already detected once");
+      // }
 
       sendDebug(new JSONObject() {
         {

@@ -575,14 +575,15 @@ RCT_EXPORT_METHOD(getMissedBeacon) {
         NSDictionary *info = [self getEddyStoneInfo:beacon];
         NSString *uuid = info[@"uuid"];
 
+        // add this in the condition below if you don't want repeating beacon events to fire for the same beacon until app restart/reinit
         BOOL isBeaconAlreadyProcessed = [self.beaconsProcessed containsObject: uuid];
 
-        if (hasListeners && self.bridge && !isBeaconAlreadyProcessed) {
+        if (hasListeners && self.bridge) {
           [self sendEventWithName:@"regionDidEnter" body: info];
           [self.beaconsProcessed addObject: uuid];
           NSLog(@"[Beacon] UUID: %@", uuid);
         } else {
-          NSLog(@"[Beacon] Beacon already processed, SKIP!: %@", uuid);
+          NSLog(@"[Beacon] Beacon already processed or no listeners attached. SKIP!: %@", uuid);
         }
       }
 }
