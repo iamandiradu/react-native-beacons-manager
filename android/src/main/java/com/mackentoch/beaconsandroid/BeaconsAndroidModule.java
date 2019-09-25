@@ -261,8 +261,8 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 	public void onBeaconServiceConnect() {
 		Log.v(LOG_TAG, "onBeaconServiceConnect");
 
-		mBeaconManager.addMonitorNotifier(mMonitorNotifier);
-		// mBeaconManager.addRangeNotifier(mRangeNotifier);
+		// mBeaconManager.addMonitorNotifier(mMonitorNotifier);
+		mBeaconManager.addRangeNotifier(mRangeNotifier);
 		sendEvent(mReactContext, "beaconServiceConnected", null);
 	}
 
@@ -320,17 +320,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
       //   Log.i(LOG_TAG, "regionDidEnter, but Beacon already detected once");
       // }
 
-      sendDebug(new JSONObject() {
-        {
-          try {
-            put("device", "android");
-            put("message", "EnterRegion");
-          } catch(JSONException e) {
-            e.printStackTrace();
-          }
-        }
-      });
-
 			try {
 				mBeaconManager.startRangingBeaconsInRegion(MyRegion);
 			} catch(RemoteException e) {
@@ -342,18 +331,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 		public void didExitRegion(Region region) {
 			Log.i(LOG_TAG, "didExitRegion");
 			sendEvent(mReactContext, "regionDidExit", createMonitoringResponse(region));
-			sendDebug(new JSONObject() {
-				{
-					try {
-						put("device", "android");
-						put("message", "ExitRegion");
-					} catch(JSONException e) {
-						e.printStackTrace();
-					}
-				}
-			});
-
-			sendBeacon(null);
 
 			try {
 				mBeaconManager.stopRangingBeaconsInRegion(MyRegion);
@@ -364,16 +341,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
 		@Override
 		public void didDetermineStateForRegion(int i, Region region) {
-			sendDebug(new JSONObject() {
-				{
-					try {
-						put("device", "android");
-						put("message", "DetermineState");
-					} catch(JSONException e) {
-						e.printStackTrace();
-					}
-				}
-			});
 		}
 	};
 
@@ -499,7 +466,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 		public void didRangeBeaconsInRegion(Collection < Beacon > beacons, Region region) {
 			Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, beacons: " + beacons.toString());
 			Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, region: " + region.toString());
-			sendEvent(mReactContext, "beaconsDidRange", createRangingResponse(beacons, region));
+			sendEvent(mReactContext, "regionDidEnter", createRangingResponse(beacons, region));
 
 			final JSONArray beaconArray = new JSONArray();
 			for (final Beacon beacon: beacons) {
@@ -507,16 +474,16 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 					{
 						try {
 							put("uuid", beacon.getId1() != null ? beacon.getId1().toString() : "");
-							put("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
-							put("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
-							put("rssi", beacon.getRssi());
-							if (beacon.getDistance() == Double.POSITIVE_INFINITY || Double.isNaN(beacon.getDistance()) || beacon.getDistance() == Double.NaN || beacon.getDistance() == Double.NEGATIVE_INFINITY) {
-								put("distance", 999.0);
-								put("proximity", "far");
-							} else {
-								put("distance", beacon.getDistance());
-								put("proximity", getProximity(beacon.getDistance()));
-							}
+							// put("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
+							// put("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
+							// put("rssi", beacon.getRssi());
+							// if (beacon.getDistance() == Double.POSITIVE_INFINITY || Double.isNaN(beacon.getDistance()) || beacon.getDistance() == Double.NaN || beacon.getDistance() == Double.NEGATIVE_INFINITY) {
+							// 	put("distance", 999.0);
+							// 	put("proximity", "far");
+							// } else {
+							// 	put("distance", beacon.getDistance());
+							// 	put("proximity", getProximity(beacon.getDistance()));
+							// }
 						} catch(JSONException e) {
 							e.printStackTrace();
 						}
@@ -532,23 +499,12 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 			}
 
 			if (sortedBeaconArray != null) {
-				Log.d(LOG_TAG, "SortedBeaconArray: " + sortedBeaconArray.toString());
+        Log.e(LOG_TAG, "SortedBeaconArray: " + sortedBeaconArray.toString());
 			} else {
 				Log.d(LOG_TAG, "SortedBeaconArray: []");
 			}
 
 			final JSONArray finalSortedBeaconArray = sortedBeaconArray;
-			sendDebug(new JSONObject() {
-				{
-					try {
-						put("device", "android");
-						put("message", "didRangeBeacons");
-						put("beacons", finalSortedBeaconArray);
-					} catch(JSONException e) {
-						e.printStackTrace();
-					}
-				}
-			});
 
 			JSONObject nearestBeacon = null;
 
@@ -561,34 +517,6 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 			}
 
 			final JSONObject finalNearestBeacon = nearestBeacon;
-
-			if (finalNearestBeacon != null) {
-				sendBeacon(new JSONObject() {
-					{
-						try {
-							put("uuid", finalNearestBeacon.get("uuid"));
-							put("major", finalNearestBeacon.get("major"));
-							put("minor", finalNearestBeacon.get("minor"));
-						} catch(JSONException e) {
-							e.printStackTrace();
-						}
-					}
-				});
-			} else {
-				sendBeacon(null);
-			}
-
-			sendDebug(new JSONObject() {
-				{
-					try {
-						put("device", "android");
-						put("message", "SendBeacon");
-						put("beacon", finalNearestBeacon);
-					} catch(JSONException e) {
-						e.printStackTrace();
-					}
-				}
-			});
 		}
 
 		private JSONArray sort(JSONArray jsonArr, String sortBy, boolean sortOrder) throws JSONException {
@@ -632,12 +560,11 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
 	private WritableMap createRangingResponse(Collection < Beacon > beacons, Region region) {
 		WritableMap map = new WritableNativeMap();
-		map.putString("identifier", region.getUniqueId());
-		map.putString("uuid", region.getId1() != null ? region.getId1().toString() : "");
 		WritableArray a = new WritableNativeArray();
 		for (Beacon beacon: beacons) {
 			WritableMap b = new WritableNativeMap();
 			b.putString("uuid", beacon.getId1() != null ? beacon.getId1().toString() : "");
+			b.putString("identifier", beacon.getId1() != null ? beacon.getId1().toString() : "");
 			if (beacon.getIdentifiers().size() > 2) {
 				b.putInt("major", beacon.getId2() != null ? beacon.getId2().toInt() : 0);
 				b.putInt("minor", beacon.getId3() != null ? beacon.getId3().toInt() : 0);
@@ -649,11 +576,11 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 			} else {
 				b.putDouble("distance", beacon.getDistance());
 				b.putString("proximity", getProximity(beacon.getDistance()));
-			}
-			a.pushMap(b);
+      }
+			map = b;
 		}
-		map.putArray("beacons", a);
-		return map;
+
+    return map;
 	}
 
 	private String getProximity(double distance) {
