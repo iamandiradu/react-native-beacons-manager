@@ -428,10 +428,10 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         // mBeaconManager.enableForegroundServiceScanning(builder.build(), 12345);
         mBeaconManager.disableForegroundServiceScanning();
         mBeaconManager.setEnableScheduledScanJobs(false);
-        mBeaconManager.setBackgroundScanPeriod(10000);
-        mBeaconManager.setBackgroundBetweenScanPeriod(20000);
-        // mBeaconManager.setForegroundScanPeriod(10000);
-        // mBeaconManager.setForegroundBetweenScanPeriod(10000);
+        mBeaconManager.setBackgroundScanPeriod(10000l);
+        mBeaconManager.setBackgroundBetweenScanPeriod(60000l);
+        mBeaconManager.setForegroundScanPeriod(10000l);
+        mBeaconManager.setForegroundBetweenScanPeriod(60000l);
         mBeaconManager.updateScanPeriods();
 
 
