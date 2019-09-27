@@ -259,11 +259,11 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
      **********************************************************************************************/
 	@Override
 	public void onBeaconServiceConnect() {
-		Log.v(LOG_TAG, "onBeaconServiceConnect");
-
+		Log.d(LOG_TAG, "beaconServiceConnected");
+    mBeaconManager.removeAllRangeNotifiers();
 		// mBeaconManager.addMonitorNotifier(mMonitorNotifier);
 		mBeaconManager.addRangeNotifier(mRangeNotifier);
-		sendEvent(mReactContext, "beaconServiceConnected", null);
+    sendEvent(mReactContext, "beaconServiceConnected", null);
 	}
 
 	@Override
@@ -374,19 +374,19 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
 	@ReactMethod
 	public void stopBeaconService(Boolean toggled, Callback resolve, Callback reject) {
-		Log.e(LOG_TAG, "Stopping Beacon Service");
+    Log.e(LOG_TAG, "Stopping Beacon Service");
 		try {
-      if (toggled.booleanValue()) {
-        // if (Build.VERSION.SDK_INT > 26) {
-				// 	NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
-				// 	notificationManager.deleteNotificationChannel("beacons");
-        //   Log.e(LOG_TAG, "Delete notif channel");
-        //   unbindManager();
-				// }
-      } else {
+      // if (toggled.booleanValue()) {
+      //   // if (Build.VERSION.SDK_INT > 26) {
+			// 	// 	NotificationManager notificationManager = (NotificationManager) mApplicationContext.getSystemService(Context.NOTIFICATION_SERVICE);
+			// 	// 	notificationManager.deleteNotificationChannel("beacons");
+      //   //   Log.e(LOG_TAG, "Delete notif channel");
+      //   //   unbindManager();
+			// 	// }
+      // } else {
         unbindManager();
         mBeaconManager.disableForegroundServiceScanning();
-      }
+      // }
 
 			resolve.invoke();
 		} catch(Exception e) {
@@ -435,7 +435,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
         mBeaconManager.updateScanPeriods();
 
 
-        Log.e(LOG_TAG, "background Service started");
+        Log.e(LOG_TAG, "Service started");
 				bindManager();
       }
 			resolve.invoke();
@@ -450,10 +450,10 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
      **********************************************************************************************/
 	@ReactMethod
 	public void startRanging(String regionId, String beaconUuid, Callback resolve, Callback reject) {
-		Log.d(LOG_TAG, "startRanging, rangingRegionId: " + regionId + ", rangingBeaconUuid: " + beaconUuid);
+    Log.d(LOG_TAG, "startRanging, rangingRegionId: " + regionId + ", rangingBeaconUuid: " + beaconUuid);
+    Region region = createRegion(regionId, beaconUuid);
 
 		try {
-			Region region = createRegion(regionId, beaconUuid);
 			mBeaconManager.startRangingBeaconsInRegion(region);
 			resolve.invoke();
 		} catch(Exception e) {
@@ -464,9 +464,9 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 
 	private RangeNotifier mRangeNotifier = new RangeNotifier() {@Override
 		public void didRangeBeaconsInRegion(Collection < Beacon > beacons, Region region) {
-			Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, beacons: " + beacons.toString());
-			Log.d(LOG_TAG, "rangingConsumer didRangeBeaconsInRegion, region: " + region.toString());
-			sendEvent(mReactContext, "regionDidEnter", createRangingResponse(beacons, region));
+			Log.d(LOG_TAG, "Ranging beacons: " + beacons.toString());
+			Log.d(LOG_TAG, "Ranging region: " + region.toString());
+      sendEvent(mReactContext, "regionDidEnter", createRangingResponse(beacons, region));
 
 			final JSONArray beaconArray = new JSONArray();
 			for (final Beacon beacon: beacons) {
@@ -516,7 +516,7 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 				}
 			}
 
-			final JSONObject finalNearestBeacon = nearestBeacon;
+      final JSONObject finalNearestBeacon = nearestBeacon;
 		}
 
 		private JSONArray sort(JSONArray jsonArr, String sortBy, boolean sortOrder) throws JSONException {
@@ -601,9 +601,11 @@ public class BeaconsAndroidModule extends ReactContextBaseJavaModule implements 
 			return;
 		}
 
-		Region region = createRegion(regionId, beaconUuid);
+    Region region = createRegion(regionId, beaconUuid);
+
 		try {
-			mBeaconManager.stopRangingBeaconsInRegion(region);
+      mBeaconManager.stopRangingBeaconsInRegion(region);
+      this.MyRegion = null;
 			resolve.invoke();
 		} catch(Exception e) {
 			Log.e(LOG_TAG, "stopRanging, error: ", e);
